@@ -34,7 +34,8 @@ export function securityHeaders() {
     // inline roda. img-src precisa de data: por causa da prévia da foto.
     'Content-Security-Policy': [
       "default-src 'self'",
-      "img-src 'self' data:",
+      // data: é a prévia da foto; blob: é o arquivo escolhido antes de redimensionar.
+      "img-src 'self' data: blob:",
       "style-src 'self'",
       "script-src 'self'",
       "form-action 'self'",

@@ -68,3 +68,9 @@ test('serveStatic não escapa da raiz por prefixo parecido', async () => {
   await serveStatic(req, res, root);
   assert.equal(status, 403);
 });
+
+test('o CSP permite as fontes de imagem que o app usa e nada além', () => {
+  const csp = securityHeaders()['Content-Security-Policy'];
+  assert.match(csp, /img-src 'self' data: blob:/);
+  assert.doesNotMatch(csp, /unsafe-inline|unsafe-eval/);
+});

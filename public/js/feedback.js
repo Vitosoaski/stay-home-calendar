@@ -2,6 +2,9 @@ import { el } from './api.js';
 
 let toastTimer = null;
 
+// Sentinela: distingue 'cancelou' de 'salvou sem motivo'.
+const CANCELADO = '\u0000cancelado';
+
 export function toast(message, { action } = {}) {
   document.querySelector('.aviso-flutuante')?.remove();
   clearTimeout(toastTimer);
@@ -35,16 +38,19 @@ export function askReason({ title, current = '' }) {
         el('h2', {}, title),
         el('label', {}, 'Motivo (opcional)', input),
         el('menu', {},
-          el('button', { type: 'button', class: 'link', onclick: () => dialog.close(' ') },
+          el('button', { type: 'button', class: 'link', onclick: () => dialog.close(CANCELADO) },
             'Cancelar'),
           el('button', { type: 'submit', class: 'primario' }, 'Salvar'))
       )
     );
 
+    // Esc dispara 'cancel' antes de 'close'; sem isto ele salvaria motivo vazio.
+    dialog.addEventListener('cancel', () => { dialog.returnValue = CANCELADO; });
+
     dialog.addEventListener('close', () => {
       const value = dialog.returnValue;
       dialog.remove();
-      resolve(value === ' ' ? null : value);
+      resolve(value === CANCELADO ? null : value);
     });
 
     document.body.append(dialog);

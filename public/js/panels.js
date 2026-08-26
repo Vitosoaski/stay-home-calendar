@@ -71,7 +71,7 @@ function frequencyPanel(state) {
             ? `pode faltar mais ${item.remaining}`
             : 'limite estourado')),
         el('div', { class: 'barra' },
-          el('div', { class: 'preenchido', style: `width: ${Math.round(used * 100)}%` })),
+          el('div', { class: 'preenchido', style: { width: `${Math.round(used * 100)}%` } })),
         el('span', { class: 'detalhe' }, `${item.missed} de ${item.hours} períodos`));
     });
 

@@ -27,6 +27,11 @@ export function el(tag, props = {}, ...children) {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(props)) {
     if (key === 'class') node.className = value;
+    // Estilo vai pelo CSSOM, nunca pelo atributo: o CSP não permite style
+    // inline, e escrever propriedade a propriedade também evita injeção.
+    else if (key === 'style') {
+      for (const [name, css] of Object.entries(value)) node.style.setProperty(name, css);
+    }
     else if (key === 'dataset') Object.assign(node.dataset, value);
     else if (key.startsWith('on')) node.addEventListener(key.slice(2).toLowerCase(), value);
     else if (value !== null && value !== undefined && value !== false) {
