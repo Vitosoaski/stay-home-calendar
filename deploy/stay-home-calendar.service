@@ -1,10 +1,10 @@
 # Serviço do calendário de faltas.
 #
-#   sudo cp deploy/faltas.service /etc/systemd/system/
+#   sudo cp deploy/stay-home-calendar.service /etc/systemd/system/
 #   sudo systemctl daemon-reload
-#   sudo systemctl enable --now faltas
+#   sudo systemctl enable --now stay-home-calendar
 #
-# Logs:  journalctl -u faltas -f
+# Logs:  journalctl -u stay-home-calendar -f
 
 [Unit]
 Description=Calendário de Faltas

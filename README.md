@@ -60,33 +60,63 @@ na URL.
 
 ## Deploy
 
-**Docker (Fly.io, VPS, o que for)** — monte um volume em `/data`, que é onde o
-banco vive:
+### Docker com o túnel embutido (recomendado)
+
+Uma imagem só, contendo o app e o `cloudflared`. Não é preciso abrir porta
+nenhuma no roteador nem ter IP fixo.
 
 ```bash
-docker build -t faltas .
-docker run -d -p 3000:3000 \
-  -e GROUP_CODE=escolha-um-codigo -e SECURE_COOKIES=1 \
-  -v faltas-data:/data faltas
+docker build -t stay-home-calendar .
 ```
 
-**Máquina própria (recomendado)** — não precisa de Docker: o projeto não tem
-dependências, então não há nada para instalar além do Node. Dois serviços
-`systemd`, um para o app e outro para o túnel:
+**Testar agora, sem domínio nem conta** — sobe uma URL pública descartável, que
+aparece no log:
+
+```bash
+docker run --rm -e GROUP_CODE=teste -e TUNNEL_QUICK=1 stay-home-calendar
+```
+
+**Para valer, com domínio próprio.** No painel Cloudflare Zero Trust crie um
+túnel (Networks → Tunnels → Create), aponte-o para `http://127.0.0.1:3000` e
+copie o token que ele mostra:
+
+```bash
+docker run -d --name stay-home-calendar --restart unless-stopped \
+  -e GROUP_CODE=escolha-um-codigo \
+  -e TUNNEL_TOKEN=cole-o-token-aqui \
+  -v stay-home-calendar-data:/data \
+  stay-home-calendar
+```
+
+É só isso. O `--restart unless-stopped` religa depois de reboot ou queda, e o
+volume guarda o banco.
+
+**Sem túnel**, se preferir expor por outro caminho:
+
+```bash
+docker run -d -p 3000:3000 -e GROUP_CODE=... -e HOST=0.0.0.0 \
+  -v stay-home-calendar-data:/data stay-home-calendar
+```
+
+Por padrão o app escuta só no loopback do contêiner: com o túnel, ele é o único
+caminho de entrada. Não publique a porta junto com o túnel — quem alcança o app
+por fora pode forjar o `X-Forwarded-For` e driblar o limite de tentativas de
+login.
+
+### Sem Docker, direto na máquina
+
+O projeto não tem dependências, então basta o Node 24 e dois serviços
+`systemd` — um para o app, outro para o `cloudflared`:
 
 ```bash
 cp .env.example .env && chmod 600 .env   # edite o GROUP_CODE
-sudo cp deploy/faltas.service /etc/systemd/system/
-sudo systemctl enable --now faltas
+sudo cp deploy/stay-home-calendar.service /etc/systemd/system/
+sudo systemctl enable --now stay-home-calendar
 ```
 
-O Cloudflare Tunnel entra na frente para dar HTTPS e domínio sem abrir porta
-nenhuma no roteador — `deploy/cloudflared-config.yml` traz o modelo. O app
-escuta só em `127.0.0.1` por padrão, então o túnel é o único caminho até ele.
-
-Nos dois casos: `SECURE_COOKIES=1` assim que houver HTTPS. Expor o site sem
-HTTPS manda o cookie de sessão em claro pela rede — qualquer um no mesmo Wi-Fi
-lê e entra como você.
+O modelo de configuração do túnel está em `deploy/cloudflared-config.yml`.
+Ligue `SECURE_COOKIES=1` assim que houver HTTPS: sem isso o cookie de sessão
+trafega em claro, e qualquer um no mesmo Wi-Fi entra como você.
 
 ## Backup
 

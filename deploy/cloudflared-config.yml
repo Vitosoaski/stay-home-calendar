@@ -2,13 +2,13 @@
 #
 # Antes:
 #   cloudflared tunnel login
-#   cloudflared tunnel create faltas
-#   cloudflared tunnel route dns faltas faltas.SEUDOMINIO.com
+#   cloudflared tunnel create stay-home-calendar
+#   cloudflared tunnel route dns stay-home-calendar faltas.SEUDOMINIO.com
 #
 # Depois:
 #   sudo cloudflared service install
 
-tunnel: faltas
+tunnel: stay-home-calendar
 credentials-file: /home/vitosoaski/.cloudflared/COLE-O-UUID-AQUI.json
 
 ingress:

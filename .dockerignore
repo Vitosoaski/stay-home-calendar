@@ -1,5 +1,8 @@
 .git
+.gitignore
+.superpowers
 data
 node_modules
 docs
 test
+.env
