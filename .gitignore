@@ -14,3 +14,6 @@ data/
 
 # não usamos dependências, mas por segurança
 node_modules/
+
+# workspace do subagent-driven-development (scratch, não versionar)
+.superpowers/
