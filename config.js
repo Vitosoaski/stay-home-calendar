@@ -1,43 +1,37 @@
 const env = process.env;
 
 export default {
-  port: Number(env.PORT ?? 3000),
-  // Só o localhost por padrão: atrás de um túnel ou proxy, ninguém na rede
-  // local alcança a porta direto — e é por ali que o X-Forwarded-For seria
-  // forjado para driblar o limite de tentativas de login.
-  host: env.HOST ?? '127.0.0.1',
-  dbPath: env.DB_PATH ?? 'data/app.db',
+	port: Number(env.PORT ?? 3000),
+	host: env.HOST ?? "127.0.0.1",
+	dbPath: env.DB_PATH ?? "data/app.db",
 
-  // Código que a pessoa digita para se cadastrar. Trocar em produção.
-  groupCode: env.GROUP_CODE ?? 'trocar-em-producao',
+	// Código que a pessoa digita para se cadastrar. Trocar em produção.
+	groupCode: env.GROUP_CODE ?? "trocar-em-producao",
 
-  sheetId: env.SHEET_ID ?? '1aBruvw1ZgEuZp2PM9d3ABqQ1akhmbhmbwWBxra5SpE8',
-  gids: {
-    planner: env.GID_PLANNER ?? '267797752',   // HF4 — planejamento 4ª fase
-    grade: env.GID_GRADE ?? '1283325522',      // 4 FASE — sala e professor
-    subjects: env.GID_SUBJECTS ?? '1802549288' // disciplinas, CH oficial
-  },
-  phase: env.PHASE ?? '4',
+	sheetId: env.SHEET_ID ?? "1aBruvw1ZgEuZp2PM9d3ABqQ1akhmbhmbwWBxra5SpE8",
+	gids: {
+		planner: env.GID_PLANNER ?? "267797752", // HF4 — planejamento 4ª fase
+		grade: env.GID_GRADE ?? "1283325522", // 4 FASE — sala e professor
+		subjects: env.GID_SUBJECTS ?? "1802549288", // disciplinas, CH oficial
+	},
+	phase: env.PHASE ?? "4",
 
-  refreshMs: Number(env.REFRESH_MS ?? 5 * 60 * 1000),
-  periodMinutes: 50,
-  holidayCode: 'Fer/Rec',
-  frequencyLimit: 0.25,
-  tz: 'America/Sao_Paulo',
-  sessionDays: 90,
-  secureCookies: env.SECURE_COOKIES === '1',
+	refreshMs: Number(env.REFRESH_MS ?? 5 * 60 * 1000),
+	periodMinutes: 50,
+	holidayCode: "Fer/Rec",
+	frequencyLimit: 0.25,
+	tz: "America/Sao_Paulo",
+	sessionDays: 90,
+	secureCookies: env.SECURE_COOKIES === "1",
 
-  // A foto já chega com 96x96 vinda do navegador; o teto é folga contra abuso.
-  maxPhotoBytes: 64 * 1024,
-  maxReasonLength: 120
+	// A foto já chega com 96x96 vinda do navegador; o teto é folga contra abuso.
+	maxPhotoBytes: 64 * 1024,
+	maxReasonLength: 120,
 };
 
 export function csvUrl(sheetId, gid) {
-  return `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
+	return `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
 }
 
 // Cores de identificação, uma por pessoa. Legíveis nos dois temas.
-export const PALETTE = [
-  '#e5484d', '#0090ff', '#30a46c', '#f76b15',
-  '#8e4ec6', '#d6409f', '#12a594', '#c2900a'
-];
+export const PALETTE = ["#e5484d", "#0090ff", "#30a46c", "#f76b15", "#8e4ec6", "#d6409f", "#12a594", "#c2900a"];

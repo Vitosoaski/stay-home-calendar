@@ -1,11 +1,13 @@
 {
-  "name": "stay-home-calendar",
-  "version": "1.0.0",
-  "private": true,
-  "type": "module",
-  "engines": { "node": ">=24" },
-  "scripts": {
-    "start": "node server.js",
-    "test": "node --test test/**/*.test.js"
-  }
+	"name": "stay-home-calendar",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"engines": {
+		"node": ">=24"
+	},
+	"scripts": {
+		"start": "node server.js",
+		"test": "node --test test/**/*.test.js"
+	}
 }

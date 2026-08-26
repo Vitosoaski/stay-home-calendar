@@ -1,61 +1,84 @@
-import { el } from './api.js';
+import { el } from "./api.js";
 
 let toastTimer = null;
 
 // Sentinela: distingue 'cancelou' de 'salvou sem motivo'.
-const CANCELADO = '\u0000cancelado';
+const CANCELADO = "\u0000cancelado";
 
 export function toast(message, { action } = {}) {
-  document.querySelector('.aviso-flutuante')?.remove();
-  clearTimeout(toastTimer);
+	document.querySelector(".aviso-flutuante")?.remove();
+	clearTimeout(toastTimer);
 
-  const node = el('div', { class: 'aviso-flutuante', role: 'status' },
-    el('span', {}, message),
-    action && el('button', {
-      class: 'link',
-      onclick: () => { node.remove(); action.onClick(); }
-    }, action.label)
-  );
+	const node = el(
+		"div",
+		{ class: "aviso-flutuante", role: "status" },
+		el("span", {}, message),
+		action &&
+			el(
+				"button",
+				{
+					class: "link",
+					onclick: () => {
+						node.remove();
+						action.onClick();
+					},
+				},
+				action.label,
+			),
+	);
 
-  document.body.append(node);
-  toastTimer = setTimeout(() => node.remove(), 5000);
+	document.body.append(node);
+	toastTimer = setTimeout(() => node.remove(), 5000);
 }
 
 // Diálogo nativo: acessível, fecha com Esc e escurece o fundo sem nenhum CSS
 // de overlay da nossa parte.
-export function askReason({ title, current = '' }) {
-  return new Promise((resolve) => {
-    const input = el('input', {
-      type: 'text', maxlength: '120', value: current,
-      placeholder: 'consulta, prova de outra matéria...'
-    });
+export function askReason({ title, current = "" }) {
+	return new Promise((resolve) => {
+		const input = el("input", {
+			type: "text",
+			maxlength: "120",
+			value: current,
+			placeholder: "consulta, prova de outra matéria...",
+		});
 
-    const dialog = el('dialog', { class: 'dialogo' },
-      el('form', {
-        method: 'dialog',
-        onsubmit: (event) => { event.preventDefault(); dialog.close(input.value.trim()); }
-      },
-        el('h2', {}, title),
-        el('label', {}, 'Motivo (opcional)', input),
-        el('menu', {},
-          el('button', { type: 'button', class: 'link', onclick: () => dialog.close(CANCELADO) },
-            'Cancelar'),
-          el('button', { type: 'submit', class: 'primario' }, 'Salvar'))
-      )
-    );
+		const dialog = el(
+			"dialog",
+			{ class: "dialogo" },
+			el(
+				"form",
+				{
+					method: "dialog",
+					onsubmit: (event) => {
+						event.preventDefault();
+						dialog.close(input.value.trim());
+					},
+				},
+				el("h2", {}, title),
+				el("label", {}, "Motivo (opcional)", input),
+				el(
+					"menu",
+					{},
+					el("button", { type: "button", class: "link", onclick: () => dialog.close(CANCELADO) }, "Cancelar"),
+					el("button", { type: "submit", class: "primario" }, "Salvar"),
+				),
+			),
+		);
 
-    // Esc dispara 'cancel' antes de 'close'; sem isto ele salvaria motivo vazio.
-    dialog.addEventListener('cancel', () => { dialog.returnValue = CANCELADO; });
+		// Esc dispara 'cancel' antes de 'close'; sem isto ele salvaria motivo vazio.
+		dialog.addEventListener("cancel", () => {
+			dialog.returnValue = CANCELADO;
+		});
 
-    dialog.addEventListener('close', () => {
-      const value = dialog.returnValue;
-      dialog.remove();
-      resolve(value === CANCELADO ? null : value);
-    });
+		dialog.addEventListener("close", () => {
+			const value = dialog.returnValue;
+			dialog.remove();
+			resolve(value === CANCELADO ? null : value);
+		});
 
-    document.body.append(dialog);
-    dialog.showModal();
-    input.focus();
-    input.select();
-  });
+		document.body.append(dialog);
+		dialog.showModal();
+		input.focus();
+		input.select();
+	});
 }
