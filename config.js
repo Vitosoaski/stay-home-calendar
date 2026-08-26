@@ -31,3 +31,9 @@ export default {
 export function csvUrl(sheetId, gid) {
   return `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
 }
+
+// Cores de identificação, uma por pessoa. Legíveis nos dois temas.
+export const PALETTE = [
+  '#e5484d', '#0090ff', '#30a46c', '#f76b15',
+  '#8e4ec6', '#d6409f', '#12a594', '#c2900a'
+];
