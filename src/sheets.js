@@ -160,3 +160,82 @@ function buildDay({ date, weekday, label, periods }, { holidayCode, periodMinute
     }))
   };
 }
+
+// Compara cabeçalhos ignorando acento, caixa e espaço em volta, porque a
+// planilha alterna entre 'HORÁRIO' e 'HORARIO', 'CH 50 MIN' e variações.
+const normalize = (s) => String(s).trim().toUpperCase()
+  .normalize('NFD').replace(/\p{Diacritic}/gu, '');
+
+function findHeaderRow(rows, required) {
+  return rows.findIndex((row) => {
+    const header = row.map(normalize);
+    return required.every((key) => header.includes(key));
+  });
+}
+
+function columnsOf(row, names) {
+  const columns = {};
+  row.forEach((value, index) => {
+    const key = normalize(value);
+    if (names.includes(key) && columns[key] === undefined) columns[key] = index;
+  });
+  return columns;
+}
+
+// Aba de grade: dia da semana na coluna 0 (2..7), depois horário, disciplina,
+// sala e — sem cabeçalho próprio — professor logo após a sala.
+export function parseGrade(csvText) {
+  const rows = parseCsv(csvText);
+  const meta = new Map();
+
+  const headerRow = findHeaderRow(rows, ['HORARIO', 'DISCIPLINA', 'LOCAL']);
+  if (headerRow === -1) return meta;
+
+  const column = columnsOf(rows[headerRow], ['HORARIO', 'DISCIPLINA', 'LOCAL']);
+  const teacherColumn = column.LOCAL + 1;
+
+  for (let r = headerRow + 1; r < rows.length; r++) {
+    const weekday = cell(rows, r, 0);
+    const time = cell(rows, r, column.HORARIO);
+    if (!/^[2-7]$/.test(weekday) || !isTime(time)) continue;
+
+    const subject = cell(rows, r, column.DISCIPLINA);
+    if (!subject) continue;
+
+    meta.set(`${weekday}|${time}`, {
+      subject,
+      room: cell(rows, r, column.LOCAL) || null,
+      teacher: cell(rows, r, teacherColumn) || null
+    });
+  }
+
+  return meta;
+}
+
+// Aba mestra de disciplinas: a coluna 'CH 50 MIN' é a carga horária em períodos
+// de 50 min, que é o denominador certo para o cálculo de frequência.
+export function parseSubjects(csvText, phase) {
+  const rows = parseCsv(csvText);
+  const subjects = new Map();
+
+  const headerRow = findHeaderRow(rows, ['SIGLA', 'FASE', 'DISCIPLINA', 'CH 50 MIN']);
+  if (headerRow === -1) return subjects;
+
+  const column = columnsOf(rows[headerRow],
+    ['SIGLA', 'FASE', 'COD SIGAA', 'DISCIPLINA', 'CH 50 MIN', 'PROFESSOR']);
+
+  for (let r = headerRow + 1; r < rows.length; r++) {
+    const code = cell(rows, r, column.SIGLA);
+    if (!code || cell(rows, r, column.FASE) !== String(phase)) continue;
+
+    const hours = Number(cell(rows, r, column['CH 50 MIN']).replace(',', '.'));
+    subjects.set(code, {
+      name: cell(rows, r, column.DISCIPLINA) || code,
+      sigaa: cell(rows, r, column['COD SIGAA']) || null,
+      teacher: cell(rows, r, column.PROFESSOR) || null,
+      hours: Number.isFinite(hours) && hours > 0 ? hours : null
+    });
+  }
+
+  return subjects;
+}
