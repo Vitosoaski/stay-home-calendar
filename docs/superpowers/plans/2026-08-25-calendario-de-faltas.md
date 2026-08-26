@@ -73,10 +73,15 @@ Cria o esqueleto e **congela** cópias reais dos CSVs no repositório. As fixtur
   "engines": { "node": ">=24" },
   "scripts": {
     "start": "node server.js",
-    "test": "node --test test/"
+    "test": "node --test test/**/*.test.js"
   }
 }
 ```
+
+O caminho do teste é um glob, não a pasta: `node --test test/` no Node 24 tenta
+carregar `test/` como módulo e falha com `MODULE_NOT_FOUND`. O `sh` que o npm usa
+entrega o padrão literal ao Node, que faz o próprio glob e casa também os arquivos
+na raiz de `test/`.
 
 Não adicione `dependencies` nem `devDependencies`. Se em algum momento parecer necessário, é sinal de que o módulo `node:` correto não foi encontrado.
 
