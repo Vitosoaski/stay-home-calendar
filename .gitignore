@@ -1,0 +1,16 @@
+# banco de dados (nunca versionar — contém PINs e fotos)
+data/
+*.db
+*.db-journal
+*.db-wal
+
+# variáveis de ambiente
+.env
+
+# artefatos de editor
+.*.kate-swp
+*.swp
+*~
+
+# não usamos dependências, mas por segurança
+node_modules/
