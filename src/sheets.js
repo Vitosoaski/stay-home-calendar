@@ -239,3 +239,56 @@ export function parseSubjects(csvText, phase) {
 
   return subjects;
 }
+
+// Junta as três abas numa estrutura pronta para serializar: é ela que vai para o
+// cache do banco e para o navegador.
+export function buildSchedule({
+  plannerCsv, gradeCsv, subjectsCsv,
+  phase, holidayCode = 'Fer/Rec', periodMinutes = 50, frequencyLimit = 0.25
+}) {
+  const planner = parsePlanner(plannerCsv, { holidayCode, periodMinutes });
+  const grade = gradeCsv ? parseGrade(gradeCsv) : new Map();
+  const official = subjectsCsv ? parseSubjects(subjectsCsv, phase) : new Map();
+
+  const subjects = {};
+  for (const [code, count] of planner.periodCounts) {
+    const info = official.get(code);
+    // A carga horária oficial é a referência; sem ela, a contagem do
+    // planejamento é a melhor aproximação disponível.
+    const hours = info?.hours ?? count;
+    subjects[code] = {
+      code,
+      name: info?.name ?? planner.legend.get(code) ?? code,
+      teacher: info?.teacher ?? null,
+      hours,
+      limit: Math.floor(hours * frequencyLimit)
+    };
+  }
+
+  const days = {};
+  const dates = [];
+  for (const day of planner.days) {
+    dates.push(day.date);
+    days[day.date] = {
+      date: day.date,
+      weekday: day.weekday,
+      label: day.label,
+      holiday: day.holiday,
+      blocks: day.blocks.map((block) => {
+        // A grade descreve a semana típica; o planejamento manda. Só aproveitamos
+        // a sala quando as duas concordam sobre qual é a matéria.
+        const slotMeta = grade.get(`${day.weekday}|${block.start}`);
+        const matches = slotMeta?.subject === block.subject;
+        return {
+          ...block,
+          name: subjects[block.subject]?.name ?? block.name,
+          room: matches ? slotMeta.room : null,
+          teacher: (matches ? slotMeta.teacher : null)
+            ?? subjects[block.subject]?.teacher ?? null
+        };
+      })
+    };
+  }
+
+  return { year: planner.year, subjects, days, dates };
+}
