@@ -236,12 +236,17 @@ marcação já gravada — nesse caso a falta continua visível em vez de sumir.
 | `GET /api/me` | — | usuário ou 401 |
 | `PATCH /api/me` | `{photo?, color?}` | usuário |
 | `GET /api/state?week=&v=` | — | estado completo, ou `{unchanged:true}` |
-| `PUT /api/absences` | `{date, subject, slots, value, reason?}` | `{ok}` |
-| `PATCH /api/absences` | `{date, slots, reason}` | `{ok}` |
+| `PUT /api/absences` | `{blockId, value, reason?}` | `{ok}` |
+| `PATCH /api/absences` | `{blockId, reason}` | `{ok}` |
 | `GET /api/photo/:id?v=` | — | imagem com `ETag` |
 
 Uma rota só (`/api/state`) devolve grade, usuários, faltas e frequência: um
 roundtrip por render, frontend simples.
+
+As rotas de falta recebem apenas `blockId` (`"2026-08-24|07:30"`); o servidor
+deriva `slots` e `subject` do horário que ele mesmo montou. Aceitar `slots` do
+cliente seria aceitar que ele inventasse períodos inexistentes naquele dia — do
+jeito atual isso é impossível por construção, e não por validação.
 
 **Versionamento.** `version` é `"<bootId>:<contador>"`. O contador sobe a cada
 refresh da planilha e a cada escrita. O `bootId` aleatório por processo evita que um
