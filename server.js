@@ -34,8 +34,8 @@ export function createServerApp({ config = defaultConfig } = {}) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const app = createServerApp();
   app.schedule.start();
-  app.server.listen(app.config.port, () => {
-    console.log(`Calendário de faltas em http://localhost:${app.config.port}`);
+  app.server.listen(app.config.port, app.config.host, () => {
+    console.log(`Calendário de faltas em http://${app.config.host}:${app.config.port}`);
     if (app.config.groupCode === 'trocar-em-producao') {
       console.warn('Atenção: defina GROUP_CODE antes de expor este site.');
     }

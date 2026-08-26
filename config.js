@@ -2,6 +2,10 @@ const env = process.env;
 
 export default {
   port: Number(env.PORT ?? 3000),
+  // Só o localhost por padrão: atrás de um túnel ou proxy, ninguém na rede
+  // local alcança a porta direto — e é por ali que o X-Forwarded-For seria
+  // forjado para driblar o limite de tentativas de login.
+  host: env.HOST ?? '127.0.0.1',
   dbPath: env.DB_PATH ?? 'data/app.db',
 
   // Código que a pessoa digita para se cadastrar. Trocar em produção.

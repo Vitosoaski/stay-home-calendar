@@ -1,0 +1,32 @@
+# Serviço do calendário de faltas.
+#
+#   sudo cp deploy/faltas.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now faltas
+#
+# Logs:  journalctl -u faltas -f
+
+[Unit]
+Description=Calendário de Faltas
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vitosoaski
+WorkingDirectory=/home/vitosoaski/Documentos/stay-home-calendar
+# O arquivo com GROUP_CODE e o resto. Deixe em 600: ele é o segredo do grupo.
+EnvironmentFile=/home/vitosoaski/Documentos/stay-home-calendar/.env
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=5
+
+# O app não precisa de mais nada além do próprio diretório.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/vitosoaski/Documentos/stay-home-calendar/data
+
+[Install]
+WantedBy=multi-user.target

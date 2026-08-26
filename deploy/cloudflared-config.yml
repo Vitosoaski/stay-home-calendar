@@ -1,0 +1,18 @@
+# Vai em ~/.cloudflared/config.yml
+#
+# Antes:
+#   cloudflared tunnel login
+#   cloudflared tunnel create faltas
+#   cloudflared tunnel route dns faltas faltas.SEUDOMINIO.com
+#
+# Depois:
+#   sudo cloudflared service install
+
+tunnel: faltas
+credentials-file: /home/vitosoaski/.cloudflared/COLE-O-UUID-AQUI.json
+
+ingress:
+  - hostname: faltas.SEUDOMINIO.com
+    service: http://localhost:3000
+  # Qualquer outro nome que chegue neste túnel morre aqui.
+  - service: http_status:404

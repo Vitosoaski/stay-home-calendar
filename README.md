@@ -70,9 +70,19 @@ docker run -d -p 3000:3000 \
   -v faltas-data:/data faltas
 ```
 
-**Máquina própria** — um serviço `systemd` apontando para `node server.js`, com
-um Cloudflare Tunnel na frente para o HTTPS. O túnel resolve certificado e IP
-fixo de uma vez.
+**Máquina própria (recomendado)** — não precisa de Docker: o projeto não tem
+dependências, então não há nada para instalar além do Node. Dois serviços
+`systemd`, um para o app e outro para o túnel:
+
+```bash
+cp .env.example .env && chmod 600 .env   # edite o GROUP_CODE
+sudo cp deploy/faltas.service /etc/systemd/system/
+sudo systemctl enable --now faltas
+```
+
+O Cloudflare Tunnel entra na frente para dar HTTPS e domínio sem abrir porta
+nenhuma no roteador — `deploy/cloudflared-config.yml` traz o modelo. O app
+escuta só em `127.0.0.1` por padrão, então o túnel é o único caminho até ele.
 
 Nos dois casos: `SECURE_COOKIES=1` assim que houver HTTPS. Expor o site sem
 HTTPS manda o cookie de sessão em claro pela rede — qualquer um no mesmo Wi-Fi
