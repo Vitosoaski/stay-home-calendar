@@ -57,3 +57,32 @@ export function parseYear(rows, headerRow) {
   }
   return new Date().getFullYear();
 }
+
+// A legenda fica à direita da célula 'LEGENDA'. As células mescladas deixam
+// espaçamento irregular, então juntamos as não-vazias em ordem e pareamos
+// duas a duas: sigla, nome, sigla, nome...
+export function parseLegend(rows, headerRow) {
+  const legend = new Map();
+
+  let legendCol = -1;
+  for (let r = 0; r < headerRow && legendCol === -1; r++) {
+    for (let c = 0; c < (rows[r]?.length ?? 0); c++) {
+      if (cell(rows, r, c).toUpperCase() === 'LEGENDA') { legendCol = c; break; }
+    }
+  }
+  if (legendCol === -1) return legend;
+
+  for (let r = 0; r < headerRow; r++) {
+    const items = [];
+    for (let c = legendCol; c < (rows[r]?.length ?? 0); c++) {
+      const value = cell(rows, r, c);
+      if (value && value.toUpperCase() !== 'LEGENDA') items.push(value);
+    }
+    for (let i = 0; i + 1 < items.length; i += 2) {
+      const [code, name] = [items[i], items[i + 1]];
+      if (code.length <= 12 && name && name !== code) legend.set(code, name);
+    }
+  }
+
+  return legend;
+}
