@@ -3,9 +3,36 @@ import { isTime, isDayMonth, isoDate, addMinutes } from './dates.js';
 
 export const cell = (rows, r, c) => (rows[r]?.[c] ?? '').trim();
 
+// Compara textos de cabeçalho ignorando acento, caixa, espaço em volta e espaço
+// interno repetido, porque a planilha alterna entre 'HORÁRIO' e 'HORARIO',
+// 'CH 50 MIN' e 'CH  50 MIN'. É a única estratégia de comparação do arquivo.
+export const normalize = (s) => String(s).trim().toUpperCase()
+  .normalize('NFD').replace(/\p{Diacritic}/gu, '')
+  .replace(/\s+/g, ' ');
+
+// Horários vêm ora como '7:30', ora como '07:30'. Normalizamos no parse para que
+// os dois lados da junção planejamento x grade usem a mesma chave.
+export const padTime = (s) => {
+  const match = String(s).trim().match(/^(\d{1,2}):(\d{2})$/);
+  return match ? `${match[1].padStart(2, '0')}:${match[2]}` : String(s).trim();
+};
+
+const WEEKDAYS = new Map([
+  ['DOMINGO', 1], ['SEGUNDA', 2], ['TERCA', 3], ['QUARTA', 4],
+  ['QUINTA', 5], ['SEXTA', 6], ['SABADO', 7]
+]);
+
+// Converte 'SEGUNDA-FEIRA', 'segunda-feira', 'SÁBADO' no número ISO do dia.
+// Devolve null quando o rótulo não é um dia da semana reconhecível.
+export function weekdayFromLabel(label) {
+  const key = normalize(label).replace(/[-\s]*FEIRA$/, '').trim();
+  return WEEKDAYS.get(key) ?? null;
+}
+
 // Encontra a linha que nomeia os dias, os blocos de cada dia e suas colunas de
 // horário. Tudo por conteúdo: se a planilha ganhar linhas ou colunas, continua
-// funcionando.
+// funcionando — e quando não reconhece a forma, lança erro em vez de devolver
+// dado parcial.
 export function findPlannerLayout(rows) {
   const headerRow = rows.findIndex(
     (r) => r.filter((c) => /-FEIRA|SÁBADO/i.test(c)).length >= 3);
@@ -14,7 +41,7 @@ export function findPlannerLayout(rows) {
   }
 
   const timeRow = rows.findIndex(
-    (r, i) => i > headerRow && r.some((c) => c.trim() === 'Data/Hr'));
+    (r, i) => i > headerRow && r.some((c) => normalize(c) === 'DATA/HR'));
   if (timeRow === -1) {
     throw new Error('planejamento: linha de horários (Data/Hr) não encontrada');
   }
@@ -23,27 +50,46 @@ export function findPlannerLayout(rows) {
   rows[headerRow].forEach((label, col) => {
     if (!/-FEIRA|SÁBADO/i.test(label)) return;
 
+    // O número do dia vem do rótulo, nunca da posição: uma coluna a mais no
+    // cabeçalho não pode renumerar a semana inteira.
+    const weekday = weekdayFromLabel(label);
+    if (weekday === null) {
+      throw new Error(`planejamento: dia da semana não reconhecido: ${label.trim()}`);
+    }
+
     // A coluna de data é o primeiro 'Data/Hr' a partir da coluna do dia.
     let dateCol = -1;
     for (let j = col; j < rows[timeRow].length; j++) {
-      if (cell(rows, timeRow, j) === 'Data/Hr') { dateCol = j; break; }
+      if (normalize(cell(rows, timeRow, j)) === 'DATA/HR') { dateCol = j; break; }
     }
     if (dateCol === -1) {
       throw new Error(`planejamento: 'Data/Hr' não encontrado para ${label.trim()}`);
     }
 
-    // Os horários são as colunas seguintes, até a primeira que não for horário.
+    // Os horários são as colunas seguintes até o próximo 'Data/Hr' (o dia
+    // seguinte) ou o fim da linha. Células vazias são puladas — uma coluna em
+    // branco no meio não pode encurtar o dia. Lixo no meio é erro, não corte.
     const slots = [];
     for (let j = dateCol + 1; j < rows[timeRow].length; j++) {
       const value = cell(rows, timeRow, j);
-      if (!isTime(value)) break;
-      slots.push({ time: value, col: j });
+      if (!value) continue;
+      if (normalize(value) === 'DATA/HR') break;
+      if (!isTime(value)) {
+        throw new Error(
+          `planejamento: célula inesperada '${value}' na linha de horários de ${label.trim()}`);
+      }
+      slots.push({ time: padTime(value), col: j });
+    }
+    if (slots.length === 0) {
+      throw new Error(`planejamento: nenhum horário encontrado para ${label.trim()}`);
     }
 
-    days.push({ label: label.trim(), weekday: days.length + 2, dateCol, slots });
+    days.push({ label: label.trim(), weekday, dateCol, slots });
   });
 
-  return { headerRow, timeRow, dataStartRow: timeRow + 2, days };
+  // A linha logo abaixo da de horários já é descartada pelo guarda isDayMonth
+  // quando é rótulo ('Data, Disciplinas'), então não pulamos linha nenhuma.
+  return { headerRow, timeRow, dataStartRow: timeRow + 1, days };
 }
 
 // O ano não está nas datas (só dd/MM), então vem do cabeçalho:
@@ -67,7 +113,7 @@ export function parseLegend(rows, headerRow) {
   let legendCol = -1;
   for (let r = 0; r < headerRow && legendCol === -1; r++) {
     for (let c = 0; c < (rows[r]?.length ?? 0); c++) {
-      if (cell(rows, r, c).toUpperCase() === 'LEGENDA') { legendCol = c; break; }
+      if (normalize(cell(rows, r, c)) === 'LEGENDA') { legendCol = c; break; }
     }
   }
   if (legendCol === -1) return legend;
@@ -76,8 +122,11 @@ export function parseLegend(rows, headerRow) {
     const items = [];
     for (let c = legendCol; c < (rows[r]?.length ?? 0); c++) {
       const value = cell(rows, r, c);
-      if (value && value.toUpperCase() !== 'LEGENDA') items.push(value);
+      if (value && normalize(value) !== 'LEGENDA') items.push(value);
     }
+    // Número ímpar de itens significa que o pareamento sigla/nome está
+    // desalinhado: melhor ignorar a linha do que inventar pares errados.
+    if (items.length % 2 !== 0) continue;
     for (let i = 0; i + 1 < items.length; i += 2) {
       const [code, name] = [items[i], items[i + 1]];
       if (code.length <= 12 && name && name !== code) legend.set(code, name);
@@ -102,9 +151,21 @@ export function parsePlanner(csvText, { holidayCode = 'Fer/Rec', periodMinutes =
       const raw = cell(rows, r, day.dateCol);
       if (!isDayMonth(raw)) continue;
 
+      // A planilha repete o número do dia na coluna à esquerda da data.
+      // Conferir contra o rótulo transforma deriva estrutural em erro alto.
+      const marker = cell(rows, r, day.dateCol - 1);
+      if (/^[1-7]$/.test(marker) && Number(marker) !== day.weekday) {
+        throw new Error(
+          `planejamento: ${day.label} (${day.weekday}) traz marcador ${marker} em ${raw}`);
+      }
+
       const [dayOfMonth, month] = raw.split('/').map(Number);
-      // As datas trazem só dd/MM. Se o mês voltar, o ano virou.
-      if (lastMonth && month < lastMonth) year++;
+      // As datas trazem só dd/MM. O ano só vira na passagem de dezembro para
+      // janeiro; qualquer outro mês para trás é erro de digitação, não virada.
+      if (lastMonth && month < lastMonth) {
+        if (lastMonth === 12 && month === 1) year++;
+        else throw new Error(`planejamento: data fora de ordem: ${raw} após mês ${lastMonth}`);
+      }
       lastMonth = month;
 
       const periods = day.slots.map((s) => ({ time: s.time, code: cell(rows, r, s.col) }));
@@ -143,14 +204,17 @@ function buildDay({ date, weekday, label, periods }, { holidayCode, periodMinute
     else groups.push({ subject: period.code, slots: [period.time] });
   }
 
-  const holiday = groups.length > 0 && groups.every((g) => g.subject === holidayCode);
+  // Recesso de meio período existe. Os grupos de feriado saem sempre — senão
+  // viram aula fantasma para marcar falta e matéria fantasma na frequência.
+  const holiday = groups.some((g) => g.subject === holidayCode);
+  const classes = groups.filter((g) => g.subject !== holidayCode);
 
   return {
     date,
     weekday,
     label,
     holiday,
-    blocks: holiday ? [] : groups.map((g) => ({
+    blocks: classes.map((g) => ({
       id: `${date}|${g.slots[0]}`,
       subject: g.subject,
       name: legend.get(g.subject) ?? g.subject,
@@ -160,11 +224,6 @@ function buildDay({ date, weekday, label, periods }, { holidayCode, periodMinute
     }))
   };
 }
-
-// Compara cabeçalhos ignorando acento, caixa e espaço em volta, porque a
-// planilha alterna entre 'HORÁRIO' e 'HORARIO', 'CH 50 MIN' e variações.
-const normalize = (s) => String(s).trim().toUpperCase()
-  .normalize('NFD').replace(/\p{Diacritic}/gu, '');
 
 function findHeaderRow(rows, required) {
   return rows.findIndex((row) => {
@@ -182,31 +241,59 @@ function columnsOf(row, names) {
   return columns;
 }
 
-// Aba de grade: dia da semana na coluna 0 (2..7), depois horário, disciplina,
-// sala e — sem cabeçalho próprio — professor logo após a sala.
+// Aba de grade: a semana típica, com sala e professor por horário. O dia vem da
+// coluna 'DIA DA SEMANA' (mesclada, então preenchida para baixo), conferida
+// contra o dígito da coluna 0 quando ele existe.
 export function parseGrade(csvText) {
   const rows = parseCsv(csvText);
   const meta = new Map();
 
   const headerRow = findHeaderRow(rows, ['HORARIO', 'DISCIPLINA', 'LOCAL']);
-  if (headerRow === -1) return meta;
+  if (headerRow === -1) {
+    throw new Error('grade: cabeçalho (HORÁRIO/DISCIPLINA/LOCAL) não encontrado');
+  }
 
-  const column = columnsOf(rows[headerRow], ['HORARIO', 'DISCIPLINA', 'LOCAL']);
+  const column = columnsOf(rows[headerRow],
+    ['DIA DA SEMANA', 'HORARIO', 'DISCIPLINA', 'LOCAL']);
+  const dayColumn = column['DIA DA SEMANA'];
   const teacherColumn = column.LOCAL + 1;
 
+  let weekday = null;
   for (let r = headerRow + 1; r < rows.length; r++) {
-    const weekday = cell(rows, r, 0);
+    if (dayColumn !== undefined) {
+      const label = cell(rows, r, dayColumn);
+      // Célula mesclada: só a primeira linha do grupo traz o nome do dia.
+      if (label) {
+        const parsed = weekdayFromLabel(label);
+        if (parsed === null) {
+          throw new Error(`grade: dia da semana não reconhecido: ${label}`);
+        }
+        weekday = parsed;
+      }
+    }
+
+    const marker = cell(rows, r, 0);
+    if (/^[1-7]$/.test(marker)) {
+      if (weekday === null) weekday = Number(marker);
+      else if (Number(marker) !== weekday) {
+        throw new Error(
+          `grade: linha ${r + 1} diz ${marker} mas o cabeçalho do grupo diz ${weekday}`);
+      }
+    }
+
     const time = cell(rows, r, column.HORARIO);
-    if (!/^[2-7]$/.test(weekday) || !isTime(time)) continue;
-
     const subject = cell(rows, r, column.DISCIPLINA);
-    if (!subject) continue;
+    if (weekday === null || !isTime(time) || !subject) continue;
 
-    meta.set(`${weekday}|${time}`, {
+    meta.set(`${weekday}|${padTime(time)}`, {
       subject,
       room: cell(rows, r, column.LOCAL) || null,
       teacher: cell(rows, r, teacherColumn) || null
     });
+  }
+
+  if (meta.size === 0) {
+    throw new Error('grade: nenhuma aula encontrada — a planilha mudou de forma');
   }
 
   return meta;
@@ -219,7 +306,9 @@ export function parseSubjects(csvText, phase) {
   const subjects = new Map();
 
   const headerRow = findHeaderRow(rows, ['SIGLA', 'FASE', 'DISCIPLINA', 'CH 50 MIN']);
-  if (headerRow === -1) return subjects;
+  if (headerRow === -1) {
+    throw new Error('disciplinas: cabeçalho (SIGLA/FASE/DISCIPLINA/CH 50 MIN) não encontrado');
+  }
 
   const column = columnsOf(rows[headerRow],
     ['SIGLA', 'FASE', 'COD SIGAA', 'DISCIPLINA', 'CH 50 MIN', 'PROFESSOR']);
@@ -235,6 +324,10 @@ export function parseSubjects(csvText, phase) {
       teacher: cell(rows, r, column.PROFESSOR) || null,
       hours: Number.isFinite(hours) && hours > 0 ? hours : null
     });
+  }
+
+  if (subjects.size === 0) {
+    throw new Error(`disciplinas: nenhuma disciplina da fase ${phase} encontrada`);
   }
 
   return subjects;
@@ -253,13 +346,15 @@ export function buildSchedule({
   const subjects = {};
   for (const [code, count] of planner.periodCounts) {
     const info = official.get(code);
-    // A carga horária oficial é a referência; sem ela, a contagem do
-    // planejamento é a melhor aproximação disponível.
+    // A carga horária oficial é a referência. Quando a matéria não está na
+    // tabela (COORD, por exemplo), a contagem do planejamento é a melhor
+    // aproximação — e o parseSubjects já garante que a tabela não veio vazia.
     const hours = info?.hours ?? count;
     subjects[code] = {
       code,
       name: info?.name ?? planner.legend.get(code) ?? code,
       teacher: info?.teacher ?? null,
+      official: Boolean(info?.hours),
       hours,
       limit: Math.floor(hours * frequencyLimit)
     };

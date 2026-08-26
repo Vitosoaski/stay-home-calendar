@@ -20,8 +20,8 @@ test('grade ignora horários sem disciplina', () => {
   for (const meta of grade.values()) assert.ok(meta.subject.length > 0);
 });
 
-test('grade devolve mapa vazio quando o cabeçalho não existe', () => {
-  assert.equal(parseGrade('a,b\nc,d').size, 0);
+test('grade lança erro quando o cabeçalho não existe', () => {
+  assert.throws(() => parseGrade('a,b\nc,d'), /cabeçalho/);
 });
 
 test('disciplinas trazem carga horária oficial em períodos de 50 min', () => {
