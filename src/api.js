@@ -8,6 +8,7 @@ import {
   readCookie, constantEquals, createRateLimiter, validPin, validName, COOKIE_NAME
 } from './auth.js';
 import { HttpError, readJson, sendJson, sendEmpty, sameOrigin, clientIp, securityHeaders } from './http.js';
+import { mondayOf, weekDates, todayIso } from './dates.js';
 import { PALETTE } from '../config.js';
 
 const ALLOWED_IMAGE_TYPES = ['image/webp', 'image/jpeg', 'image/png'];
@@ -154,6 +155,136 @@ export function createApi({ db, schedule, config }) {
     res.end(Buffer.from(row.photo));
   }
 
+  // Lê o horário atual do serviço. Nomeado à parte para não sombrear `schedule`,
+  // que é o serviço em si.
+  const currentGrid = () => schedule.current().schedule;
+
+  // O bloco é procurado no horário que o servidor montou. É isso que impede o
+  // cliente de inventar períodos: ele só manda qual aula, nunca quais períodos.
+  function findBlock(blockId) {
+    const [date, start] = String(blockId ?? '').split('|');
+    const block = currentGrid()?.days?.[date]?.blocks.find((b) => b.start === start);
+    if (!block) throw new HttpError(400, 'Essa aula não existe no horário');
+    return { date, block };
+  }
+
+  function readReason(value) {
+    if (value === undefined || value === null || value === '') return null;
+    const text = String(value).trim();
+    if (text.length > config.maxReasonLength) throw new HttpError(400, 'Motivo longo demais');
+    return text || null;
+  }
+
+  function emptyDay(date) {
+    const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
+    return { date, weekday: weekday === 0 ? 1 : weekday + 1, label: '', holiday: false, blocks: [] };
+  }
+
+  function decorate(day, marks) {
+    return {
+      ...day,
+      blocks: day.blocks.map((block) => ({
+        ...block,
+        absences: marks.get(block.id) ?? []
+      }))
+    };
+  }
+
+  // Uma pessoa aparece no bloco se faltou em pelo menos um de seus períodos.
+  // Assim a marcação sobrevive à planilha remontar os blocos depois.
+  function marksFor(from, to) {
+    const rows = absencesBetween(db, from, to);
+    const grid = currentGrid();
+    const marks = new Map();
+
+    for (const row of rows) {
+      const blocks = grid?.days?.[row.date]?.blocks ?? [];
+      const block = blocks.find((b) => b.slots.includes(row.slot));
+      if (!block) continue;
+      const list = marks.get(block.id) ?? [];
+      if (!list.some((entry) => entry.userId === row.user_id)) {
+        list.push({ userId: row.user_id, reason: row.reason });
+      }
+      marks.set(block.id, list);
+    }
+    return marks;
+  }
+
+  function frequencyFor(userId) {
+    const counts = new Map(absenceCounts(db, userId).map((r) => [r.subject, r.count]));
+    return Object.values(currentGrid()?.subjects ?? {})
+      .map((subject) => {
+        const missed = counts.get(subject.code) ?? 0;
+        return {
+          subject: subject.code, name: subject.name,
+          hours: subject.hours, limit: subject.limit,
+          missed, remaining: subject.limit - missed
+        };
+      })
+      .sort((a, b) => a.remaining - b.remaining);
+  }
+
+  function handleState(req, res, url) {
+    const state = schedule.current();
+    if (url.searchParams.get('v') === state.version) {
+      sendJson(res, 200, { unchanged: true, version: state.version });
+      return;
+    }
+
+    const user = sessionUser(req);
+    const today = todayIso(config.tz);
+    const monday = mondayOf(url.searchParams.get('week') || today);
+    const dates = weekDates(monday);
+
+    // Hoje pode estar fora da semana pedida, e o painel "Hoje" precisa dele.
+    const span = [...dates, today].sort();
+    const marks = marksFor(span[0], span.at(-1));
+    const days = dates.map((date) => decorate(state.schedule?.days?.[date] ?? emptyDay(date), marks));
+    const todayDay = decorate(state.schedule?.days?.[today] ?? emptyDay(today), marks);
+
+    const all = state.schedule?.dates ?? [];
+    sendJson(res, 200, {
+      version: state.version,
+      updatedAt: state.updatedAt,
+      stale: state.stale,
+      error: state.error,
+      today: todayDay,
+      week: {
+        monday,
+        first: all.length ? mondayOf(all[0]) : monday,
+        last: all.length ? mondayOf(all.at(-1)) : monday
+      },
+      days,
+      users: listUsers(db),
+      frequency: user ? frequencyFor(user.id) : null
+    });
+  }
+
+  async function handleSetAbsence(req, res) {
+    const user = requireUser(req);
+    const body = await readJson(req);
+    const { date, block } = findBlock(body.blockId);
+    const reason = readReason(body.reason);
+
+    setAbsence(db, {
+      userId: user.id,          // sempre da sessão, nunca do corpo
+      date, slots: block.slots, subject: block.subject,
+      value: Boolean(body.value), reason
+    });
+    schedule.bumpVersion();
+    sendJson(res, 200, { ok: true, blockId: block.id, value: Boolean(body.value) });
+  }
+
+  async function handleSetReason(req, res) {
+    const user = requireUser(req);
+    const body = await readJson(req);
+    const { date, block } = findBlock(body.blockId);
+
+    setReason(db, { userId: user.id, date, slots: block.slots, reason: readReason(body.reason) });
+    schedule.bumpVersion();
+    sendJson(res, 200, { ok: true });
+  }
+
   return async function handle(req, res) {
     const url = new URL(req.url, `http://${req.headers.host ?? 'localhost'}`);
     if (!url.pathname.startsWith('/api/')) return false;
@@ -173,6 +304,9 @@ export function createApi({ db, schedule, config }) {
       else if (route === 'GET /api/me') sendJson(res, 200, { user: requireUser(req) });
       else if (route === 'PATCH /api/me') await handleUpdateMe(req, res);
       else if (photoMatch) handlePhoto(req, res, photoMatch[1]);
+      else if (route === 'GET /api/state') handleState(req, res, url);
+      else if (route === 'PUT /api/absences') await handleSetAbsence(req, res);
+      else if (route === 'PATCH /api/absences') await handleSetReason(req, res);
       else sendJson(res, 404, { error: 'Rota não encontrada' });
     } catch (error) {
       const status = error instanceof HttpError ? error.status : 500;
