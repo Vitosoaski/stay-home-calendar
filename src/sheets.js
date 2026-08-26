@@ -86,3 +86,77 @@ export function parseLegend(rows, headerRow) {
 
   return legend;
 }
+
+// Percorre as semanas e produz um dia por bloco de dia, já com as aulas agrupadas.
+export function parsePlanner(csvText, { holidayCode = 'Fer/Rec', periodMinutes = 50 } = {}) {
+  const rows = parseCsv(csvText);
+  const layout = findPlannerLayout(rows);
+  const legend = parseLegend(rows, layout.headerRow);
+
+  let year = parseYear(rows, layout.headerRow);
+  let lastMonth = 0;
+  const days = [];
+
+  for (let r = layout.dataStartRow; r < rows.length; r++) {
+    for (const day of layout.days) {
+      const raw = cell(rows, r, day.dateCol);
+      if (!isDayMonth(raw)) continue;
+
+      const [dayOfMonth, month] = raw.split('/').map(Number);
+      // As datas trazem só dd/MM. Se o mês voltar, o ano virou.
+      if (lastMonth && month < lastMonth) year++;
+      lastMonth = month;
+
+      const periods = day.slots.map((s) => ({ time: s.time, code: cell(rows, r, s.col) }));
+      days.push(buildDay({
+        date: isoDate(dayOfMonth, month, year),
+        weekday: day.weekday,
+        label: day.label,
+        periods
+      }, { holidayCode, periodMinutes, legend }));
+    }
+  }
+
+  const periodCounts = new Map();
+  for (const day of days) {
+    for (const block of day.blocks) {
+      periodCounts.set(block.subject,
+        (periodCounts.get(block.subject) ?? 0) + block.slots.length);
+    }
+  }
+
+  return { year, legend, periodCounts, days };
+}
+
+function buildDay({ date, weekday, label, periods }, { holidayCode, periodMinutes, legend }) {
+  const groups = [];
+  for (const period of periods) {
+    if (!period.code) continue;
+    const previous = groups.at(-1);
+    // Só funde se este período começa exatamente quando o anterior termina.
+    // É isso que separa as aulas em torno do intervalo, sem codificar horários.
+    const contiguous = previous
+      && previous.subject === period.code
+      && addMinutes(previous.slots.at(-1), periodMinutes) === period.time;
+
+    if (contiguous) previous.slots.push(period.time);
+    else groups.push({ subject: period.code, slots: [period.time] });
+  }
+
+  const holiday = groups.length > 0 && groups.every((g) => g.subject === holidayCode);
+
+  return {
+    date,
+    weekday,
+    label,
+    holiday,
+    blocks: holiday ? [] : groups.map((g) => ({
+      id: `${date}|${g.slots[0]}`,
+      subject: g.subject,
+      name: legend.get(g.subject) ?? g.subject,
+      slots: g.slots,
+      start: g.slots[0],
+      end: addMinutes(g.slots.at(-1), periodMinutes)
+    }))
+  };
+}
